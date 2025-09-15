@@ -1,0 +1,462 @@
+// App.jsx
+import React, { useEffect, useState } from "react";
+
+/*
+  MimosaShopMarket - Single-file React app (paste into src/App.jsx)
+  - Requires Tailwind CSS in the project for styling (classes used heavily)
+  - Admin demo credentials: admin / 1234
+  - Persists products, ads, cart in localStorage
+  - Music background with mute/unmute
+  - Admin can add/edit/delete products and ads (fields: name, imageURL, desc, price, link)
+*/
+
+export default function App() {
+  // --- Palette & site text (can be tuned) ---
+  const site = {
+    name: "mimosaShopMarket",
+    tagline: "VVIP Boutique • Limited Editions",
+    credits: "By Respect Rez Devs",
+  };
+
+  // --- load/store helpers ---
+  const load = (key, fallback) => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+  const save = (key, value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {}
+  };
+
+  // --- state: products, ads, cart, admin ---
+  const [products, setProducts] = useState(() =>
+    load("mimosa_products_v2", [
+      {
+        id: "p1",
+        name: "معطف المخمل Signature",
+        desc: "تفصيل يدوي، قماش فاخر وقطع محدودة.",
+        price: 1299,
+        img:
+          "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=1400&q=80",
+      },
+      {
+        id: "p2",
+        name: "قميص حرير Lumière",
+        desc: "لمسة ناعمة ولمعان خفيف — للمناسبات الملكية.",
+        price: 699,
+        img:
+          "https://images.unsplash.com/photo-1521334884684-d80222895322?w=1400&q=80",
+      },
+      {
+        id: "p3",
+        name: "سروال Tailored",
+        desc: "خياطة دقيقة وذوق راقٍ.",
+        price: 499,
+        img:
+          "https://images.unsplash.com/photo-1520975917980-64a3e0ee7d9b?w=1400&q=80",
+      },
+    ])
+  );
+
+  const [ads, setAds] = useState(() =>
+    load("mimosa_ads_v1", [
+      {
+        id: "ad1",
+        title: "تشكيلة الخريف VVIP",
+        desc: "خصم خاص للمستخدمين المسجلين — عدد محدود.",
+        img:
+          "https://images.unsplash.com/photo-1503342452485-86f7b4a1b5d3?w=1400&q=80",
+        link: "#",
+      },
+    ])
+  );
+
+  const [cart, setCart] = useState(() => load("mimosa_cart_v1", []));
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [adminLogged, setAdminLogged] = useState(() =>
+    Boolean(localStorage.getItem("mimosa_admin_logged"))
+  );
+  const [adminForm, setAdminForm] = useState({ username: "", code: "" });
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutInfo, setCheckoutInfo] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    address: "",
+    city: "",
+    country: "",
+  });
+
+  const [message, setMessage] = useState(null);
+  const [musicOn, setMusicOn] = useState(() =>
+    localStorage.getItem("mimosa_music") !== "off"
+  );
+
+  // persisters
+  useEffect(() => save("mimosa_products_v2", products), [products]);
+  useEffect(() => save("mimosa_ads_v1", ads), [ads]);
+  useEffect(() => save("mimosa_cart_v1", cart), [cart]);
+  useEffect(() => save("mimosa_music", musicOn ? "on" : "off"), [musicOn]);
+
+  // --- utility functions ---
+  const notify = (txt, ms = 2000) => {
+    setMessage(txt);
+    setTimeout(() => setMessage(null), ms);
+  };
+
+  // cart handlers
+  const addToCart = (prod) => {
+    setCart((s) => {
+      const found = s.find((i) => i.id === prod.id);
+      if (found) return s.map((i) => (i.id === prod.id ? { ...i, qty: i.qty + 1 } : i));
+      return [...s, { ...prod, qty: 1 }];
+    });
+    notify("تمت الإضافة إلى السلة ✨");
+  };
+  const changeQty = (id, delta) =>
+    setCart((s) =>
+      s
+        .map((it) => (it.id === id ? { ...it, qty: Math.max(1, it.qty + delta) } : it))
+        .filter(Boolean)
+    );
+  const removeFromCart = (id) => setCart((s) => s.filter((it) => it.id !== id));
+  const cartTotal = () => cart.reduce((sum, it) => sum + it.price * it.qty, 0);
+
+  // admin auth (demo)
+  const adminLogin = (e) => {
+    e.preventDefault();
+    if (adminForm.username === "admin" && adminForm.code === "1234") {
+      setAdminLogged(true);
+      localStorage.setItem("mimosa_admin_logged", "1");
+      notify("مرحبا Admin — الآن يمكنك إدارة المتجر");
+    } else {
+      notify("اسم المستخدم أو الكود خاطئ", 2500);
+    }
+  };
+  const adminLogout = () => {
+    setAdminLogged(false);
+    localStorage.removeItem("mimosa_admin_logged");
+    notify("تم تسجيل الخروج");
+  };
+
+  // admin product actions
+  const addProduct = (p) => {
+    setProducts((s) => [{ ...p, id: `p${Date.now()}` }, ...s]);
+    notify("تم إضافة المنتج");
+  };
+  const updateProduct = (id, upd) => {
+    setProducts((s) => s.map((it) => (it.id === id ? { ...it, ...upd } : it)));
+    notify("تم تحديث المنتج");
+  };
+  const deleteProduct = (id) => {
+    setProducts((s) => s.filter((it) => it.id !== id));
+    notify("تم حذف المنتج");
+  };
+
+  // admin ads actions
+  const addAd = (a) => {
+    setAds((s) => [{ ...a, id: `ad${Date.now()}` }, ...s]);
+    notify("تم نشر الإعلان");
+  };
+  const deleteAd = (id) => {
+    setAds((s) => s.filter((it) => it.id !== id));
+    notify("تم حذف الإعلان");
+  };
+
+  // checkout
+  const handleCheckout = (e) => {
+    e.preventDefault();
+    if (!checkoutInfo.firstName || !checkoutInfo.phone || cart.length === 0) {
+      notify("عمر الاسم، الهاتف واختر منتجات أولا", 2500);
+      return;
+    }
+    const order = {
+      id: `o${Date.now()}`,
+      items: cart,
+      total: cartTotal(),
+      customer: checkoutInfo,
+      createdAt: new Date().toISOString(),
+    };
+    save("mimosa_last_order", order);
+    setCart([]);
+    notify("شكراً! تم استقبال طلبك — سنعاود الاتصال بك قريبا", 3500);
+    setShowCheckout(false);
+    setCheckoutInfo({ firstName: "", lastName: "", phone: "", address: "", city: "", country: "" });
+  };
+
+  // small components inside file for clarity
+  const Header = () => (
+    <header className="max-w-6xl mx-auto p-6 flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <div className="rounded-full bg-gradient-to-r from-[#b68646] to-[#f1d7a6] p-2 shadow-2xl">
+          <div className="w-12 h-12 rounded-full bg-black flex items-center justify-center font-serif text-xl">M</div>
+        </div>
+        <div>
+          <h1 className="text-2xl font-serif tracking-wide">{site.name}</h1>
+          <p className="text-xs text-gray-300">{site.tagline}</p>
+        </div>
+      </div>
+
+      <nav className="flex items-center gap-3">
+        <button
+          onClick={() => setAdminOpen(true)}
+          className="px-4 py-2 border border-gray-700 rounded-md text-sm hover:bg-white/5"
+        >
+          Admin
+        </button>
+
+        <button
+          onClick={() => setShowCheckout(true)}
+          className="px-4 py-2 rounded-md bg-gradient-to-r from-[#b68646] to-[#f1d7a6] text-black font-medium"
+        >
+          Checkout ({cart.length})
+        </button>
+
+        <button
+          onClick={() => setMusicOn((s) => !s)}
+          className="px-3 py-2 rounded-md bg-white/5 text-sm"
+        >
+          {musicOn ? "🔊 الموسيقى: تشغيل" : "🔈 الموسيقى: إيقاف"}
+        </button>
+      </nav>
+    </header>
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#05060a] via-[#081018] to-[#091021] text-white">
+      {/* background decorative corner glow */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -left-40 -top-40 w-96 h-96 rounded-full bg-gradient-to-tr from-[#2b0b3a]/30 to-[#b68646]/10 blur-3xl"></div>
+      </div>
+
+      {/* audio */}
+      {musicOn && (
+        <audio autoPlay loop>
+          {/* royalty-free example — replace with your own file if needed */}
+          <source src="https://cdn.pixabay.com/download/audio/2022/02/15/audio_f0b4d0b2f0.mp3?filename=smooth-lounge-115870.mp3" type="audio/mpeg" />
+        </audio>
+      )}
+
+      <Header />
+
+      {/* Hero */}
+      <section className="max-w-6xl mx-auto p-6">
+        <div className="rounded-2xl p-8 bg-gradient-to-r from-white/3 via-transparent to-white/6 backdrop-blur-md border border-white/6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            <div>
+              <h2 className="text-5xl font-serif leading-tight">ارتقِ بإطلالتك — كن استثنائياً</h2>
+              <p className="mt-4 text-gray-300 max-w-xl">مجموعات نُقِيت بعناية لزبناء VVIP. كل قطعة تحمل توقيع الفخامة.</p>
+              <div className="mt-6 flex gap-3">
+                <button className="px-6 py-3 bg-gradient-to-r from-[#b68646] to-[#f1d7a6] text-black rounded-md font-semibold">تسوّق الآن</button>
+                <button className="px-6 py-3 border border-gray-600 rounded-md">التواصل</button>
+              </div>
+            </div>
+
+            <div className="relative h-64 md:h-80 rounded-lg overflow-hidden shadow-inner">
+              <img
+                alt="hero"
+                src="https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=1400&q=80"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute bottom-4 right-4 bg-black/40 px-3 py-1 rounded text-xs">Exclusive drops</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Ads */}
+      <section className="max-w-6xl mx-auto p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {ads.map((ad) => (
+            <a key={ad.id} href={ad.link || "#"} className="rounded-xl overflow-hidden shadow-lg group">
+              <div className="relative h-44 bg-gray-800">
+                <img src={ad.img} alt={ad.title} className="w-full h-full object-cover transform group-hover:scale-105 transition" />
+                <div className="absolute inset-0 bg-black/30"></div>
+                <div className="absolute left-4 bottom-4 text-white">
+                  <div className="text-sm font-semibold">{ad.title}</div>
+                  <div className="text-xs text-gray-200 max-w-xs">{ad.desc}</div>
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      {/* Main grid: products + sidebar */}
+      <main className="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* products */}
+        <section className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold">المجموعة المختارة</h3>
+            <div className="text-sm text-gray-300">قطع مميزة وقياسات محدودة</div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {products.map((p) => (
+              <article key={p.id} className="bg-white/4 rounded-2xl p-4 backdrop-blur-sm">
+                <div className="h-56 rounded-md mb-4 overflow-hidden">
+                  <img src={p.img} alt={p.name} className="w-full h-full object-cover transform hover:scale-105 transition" />
+                </div>
+                <h4 className="font-serif text-lg">{p.name}</h4>
+                <p className="text-sm text-gray-300 mt-1">{p.desc}</p>
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="text-lg font-semibold">{p.price} MAD</div>
+                  <div className="flex gap-2">
+                    <button onClick={() => addToCart(p)} className="px-3 py-1 rounded-md bg-gradient-to-r from-[#b68646] to-[#f1d7a6] text-black font-medium text-sm">Add</button>
+                    {adminLogged && (
+                      <button
+                        onClick={() => {
+                          if (confirm("هل ترغب في حذف هذا المنتج؟")) deleteProduct(p.id);
+                        }}
+                        className="px-3 py-1 rounded-md border border-red-400 text-sm"
+                      >
+                        حذف
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        {/* sidebar */}
+        <aside className="space-y-6">
+          {/* Cart */}
+          <div className="bg-white/4 rounded-xl p-4">
+            <h4 className="font-semibold">سلتك</h4>
+            <div className="mt-3 space-y-3">
+              {cart.length === 0 ? (
+                <div className="text-sm text-gray-300">العربة فارغة</div>
+              ) : (
+                cart.map((it) => (
+                  <div key={it.id} className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{it.name}</div>
+                      <div className="text-sm text-gray-300">{it.price} × {it.qty}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => changeQty(it.id, -1)} className="px-2 py-1 border rounded">-</button>
+                      <button onClick={() => changeQty(it.id, 1)} className="px-2 py-1 border rounded">+</button>
+                      <button onClick={() => removeFromCart(it.id)} className="px-2 py-1 border rounded">✕</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <div className="text-sm text-gray-300">المجموع</div>
+              <div className="font-semibold">{cartTotal()} MAD</div>
+            </div>
+
+            <button disabled={cart.length === 0} onClick={() => setShowCheckout(true)} className="w-full mt-4 px-4 py-2 bg-gradient-to-r from-[#b68646] to-[#f1d7a6] text-black rounded-md disabled:opacity-50">Proceed to Checkout</button>
+          </div>
+
+          {/* Admin Panel */}
+          <div className="bg-white/4 rounded-xl p-4">
+            <h4 className="font-semibold">Admin Dashboard</h4>
+            {adminLogged ? (
+              <div className="mt-3 space-y-2">
+                <button onClick={() => {
+                  // add product inline form using prompt (simple demo). in production use a modal form
+                  const name = prompt("اسم المنتج");
+                  if (!name) return;
+                  const price = parseFloat(prompt("الثمن (أرقام فقط)"));
+                  const img = prompt("رابط صورة المنتج (image URL) — أو اتركه فارغاً");
+                  const desc = prompt("وصف قصير للمنتج");
+                  addProduct({ name, price: isNaN(price) ? 0 : price, img: img || placeholderImg(), desc: desc || "" });
+                }} className="bg-gradient-to-r from-[#b68646] to-[#f1d7a6] w-full py-2 rounded-xl">إضافة منتج</button>
+
+                <button onClick={() => {
+                  const title = prompt("عنوان الإعلان");
+                  if (!title) return;
+                  const img = prompt("رابط صورة الإعلان");
+                  const desc = prompt("وصف الإعلان");
+                  const link = prompt("رابط عند الضغط (URL) — اتركه # إن لم يوجد");
+                  addAd({ title, img: img || placeholderImg(), desc: desc || "", link: link || "#" });
+                }} className="w-full py-2 rounded-xl border border-gray-600">نشر إعلان</button>
+
+                <button onClick={adminLogout} className="w-full mt-2 text-sm text-gray-300 border border-gray-700 py-2 rounded">خروج</button>
+              </div>
+            ) : (
+              <div className="mt-3 text-sm text-gray-300">باش تدير تسيير المنتجات دير Login كـ Admin.</div>
+            )}
+          </div>
+
+          {/* credits */}
+          <div className="text-xs text-gray-400">Powered & styled — <span className="font-medium">{site.credits}</span></div>
+        </aside>
+      </main>
+
+      {/* Footer */}
+      <footer className="max-w-6xl mx-auto px-6 mt-12 pb-10 text-gray-300 text-sm">
+        <div className="border-t border-white/6 pt-6 flex items-center justify-between">
+          <div>© {new Date().getFullYear()} {site.name} — All rights reserved</div>
+          <div>Design & Dev: <span className="font-medium">{site.credits}</span></div>
+        </div>
+      </footer>
+
+      {/* Admin modal (login) */}
+      {adminOpen && !adminLogged && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <form onSubmit={adminLogin} className="bg-[#071017] p-6 rounded-xl w-80">
+            <h4 className="text-lg font-semibold mb-3">Admin Login</h4>
+            <label className="block text-xs text-gray-300">اسم المستخدم</label>
+            <input value={adminForm.username} onChange={(e) => setAdminForm((s) => ({ ...s, username: e.target.value }))} className="w-full mt-1 p-2 rounded bg-black/40 mb-2" />
+            <label className="block text-xs text-gray-300">الكود</label>
+            <input value={adminForm.code} onChange={(e) => setAdminForm((s) => ({ ...s, code: e.target.value }))} className="w-full mt-1 p-2 rounded bg-black/40 mb-3" />
+            <div className="flex items-center justify-between">
+              <button type="submit" className="px-4 py-2 bg-gradient-to-r from-[#b68646] to-[#f1d7a6] rounded">Login</button>
+              <button type="button" onClick={() => setAdminOpen(false)} className="text-sm">Cancel</button>
+            </div>
+            <div className="mt-2 text-xs text-gray-400">Demo: <span className="font-medium">admin / 1234</span></div>
+          </form>
+        </div>
+      )}
+
+      {/* Checkout modal */}
+      {showCheckout && (
+        <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center">
+          <form onSubmit={handleCheckout} className="bg-[#071017] p-6 rounded-xl w-96">
+            <h4 className="text-lg font-semibold">Checkout</h4>
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <input placeholder="First name" value={checkoutInfo.firstName} onChange={(e)=>setCheckoutInfo({...checkoutInfo, firstName: e.target.value})} className="p-2 rounded bg-black/30" />
+              <input placeholder="Last name" value={checkoutInfo.lastName} onChange={(e)=>setCheckoutInfo({...checkoutInfo, lastName: e.target.value})} className="p-2 rounded bg-black/30" />
+              <input placeholder="Phone" value={checkoutInfo.phone} onChange={(e)=>setCheckoutInfo({...checkoutInfo, phone: e.target.value})} className="p-2 rounded bg-black/30 col-span-2" />
+              <input placeholder="Address" value={checkoutInfo.address} onChange={(e)=>setCheckoutInfo({...checkoutInfo, address: e.target.value})} className="p-2 rounded bg-black/30 col-span-2" />
+              <input placeholder="City" value={checkoutInfo.city} onChange={(e)=>setCheckoutInfo({...checkoutInfo, city: e.target.value})} className="p-2 rounded bg-black/30" />
+              <input placeholder="Country" value={checkoutInfo.country} onChange={(e)=>setCheckoutInfo({...checkoutInfo, country: e.target.value})} className="p-2 rounded bg-black/30" />
+            </div>
+
+            <div className="mt-4">
+              <div className="text-sm text-gray-300">Summary:</div>
+              <ul className="mt-2 text-sm">
+                {cart.map((it) => <li key={it.id}>{it.name} × {it.qty} — {it.price * it.qty} MAD</li>)}
+              </ul>
+              <div className="mt-2 font-semibold">Total: {cartTotal()} MAD</div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <button type="button" onClick={()=>setShowCheckout(false)} className="px-3 py-2 border rounded">Cancel</button>
+              <button className="px-4 py-2 bg-gradient-to-r from-[#b68646] to-[#f1d7a6] text-black rounded">Pay / Confirm</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* floating message */}
+      {message && <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-black/70 px-4 py-2 rounded-md">{message}</div>}
+    </div>
+  );
+}
+
+/* small helper */
+function placeholderImg() {
+  return "https://images.unsplash.com/photo-1520975917980-64a3e0ee7d9b?w=1200&q=60";
+}
